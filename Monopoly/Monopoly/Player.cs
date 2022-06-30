@@ -44,10 +44,12 @@ namespace MONOPOLY
         public int card = 0;
 
         public List<int> items;
+        public List<Tile> tiles;
 
         public Player()
         {
             items = new List<int>();
+            tiles = new List<Tile>();
         }
 
         public virtual EBuyDecision DecideBuy(int index)
