@@ -1,17 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using Logging;
 
 namespace Monopoly
 {
     class Program
     {
-        static void Main(string[] args)
+        static Logger log;
+
+        static void Main()
         {
+            log = new Logger();
             Analytics a = new Analytics();
             Analytics.instance = a;
 
-            string path = "C:\\Users\\Brad\\Desktop\\monopoly_population.txt";
+            DirectoryInfo di = new DirectoryInfo(Directory.GetCurrentDirectory());
+
+            string path = $"{di.Parent.FullName}\\monopoly_population.txt";
+
+            string[] logFiles = Directory.GetFiles(di.Parent.FullName, "*.log");
+            for (int l = 0; l < logFiles.Length; l++)
+            {
+                File.Delete(logFiles[l]);
+            }
 
             RNG.Initialise();
 
@@ -37,7 +49,8 @@ namespace Monopoly
 
             for (int i = 0; i < 1000; i++)
             {
-                tournament.ExecuteTournament();
+                log.Write($"STARTING TOURNAMENT {i}", true);
+                tournament.ExecuteTournament(i);
                 NEAT.Population.instance.NewGeneration();
                 SaveState(path, tournament);
             }
@@ -49,7 +62,7 @@ namespace Monopoly
 
         public static void SaveState(string target, Tournament tournament)
         {
-            Console.WriteLine("SAVING POPULATION");
+            log.Write($"SAVING POPULATION", true);
 
             string build = "";
             string build2 = "";
@@ -106,7 +119,7 @@ namespace Monopoly
                     net_count++;
                     gene_count++;
 
-                    Console.WriteLine(gene_count + "/" + NEAT.Population.instance.genetics.Count);
+                    log.Write($"{gene_count}/{NEAT.Population.instance.genetics.Count}", true);
 
                     NEAT.Genotype genes = NEAT.Population.instance.species[i].members[j];
 
@@ -164,7 +177,7 @@ namespace Monopoly
                 sw.Write(build2);
             }
 
-            Console.WriteLine(markings + " MARKINGS");
+            log.Write($"{markings} MARKINGS", true);
         }
 
         public static void LoadState(string location, ref Tournament tournament)

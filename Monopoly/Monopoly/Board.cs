@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Logging;
 
 namespace MONOPOLY
 {
@@ -70,7 +71,8 @@ namespace MONOPOLY
         public static int BANK_INDEX = -1;
 
         public static int BOARD_LENGTH = 40;
-        public static int STALEMATE_TURN = 300;
+        public static int STALEMATE_TURN;
+        public static int[] DRAW_ROUNDS = new int[5] { 0, 2000, 1500, 1000, 500 };
 
         public static int GO_BONUS = 200;
         public static int GO_LANDING_BONUS = 200;
@@ -156,10 +158,18 @@ namespace MONOPOLY
         //--------------------
         public List<CardEntry> chance;
         public List<CardEntry> chest;
-        //--------------------  
+        //--------------------
 
-        public Board(NetworkAdapter _adapter)
+        Tiles tiles;
+        List<Tile> tileList;
+        Logger log;
+
+        public Board(NetworkAdapter _adapter, Logger _log)
         {
+            log = _log;
+            tiles = new Tiles();
+            tileList = tiles.GetTiles();
+
             players = new NeuralPlayer[PLAYER_COUNT];
             random = new RNG();
 
@@ -174,6 +184,7 @@ namespace MONOPOLY
             }
 
             remaining = PLAYER_COUNT;
+            STALEMATE_TURN = DRAW_ROUNDS[remaining];
 
             chance = new List<CardEntry>();
             chest = new List<CardEntry>();
@@ -239,6 +250,7 @@ namespace MONOPOLY
             int d2 = random.gen.Next(1, 7);
 
             last_roll = d1 + d2;
+            log.Write($"Player {turn} rolled {last_roll}", false);
 
             bool isDouble = d1 == d2;
             bool doubleInJail = false;
@@ -253,7 +265,10 @@ namespace MONOPOLY
                     //regular jail state
                     if (isDouble)
                     {
+                        log.Write($"Player {turn} rolled doubles to leave jail", false);
+
                         players[turn].jail = 0;
+                        players[turn].doub = 0;
                         players[turn].state = Player.EState.NORMAL;
 
                         adapter.SetJail(turn, 0);
@@ -279,6 +294,8 @@ namespace MONOPOLY
                 {
                     Payment(turn, JAIL_PENALTY);
 
+                    log.Write($"Player {turn} paid {JAIL_PENALTY} to leave jail", false);
+
                     players[turn].jail = 0;
                     players[turn].state = Player.EState.NORMAL;
 
@@ -288,6 +305,8 @@ namespace MONOPOLY
                 {
                     if (players[turn].card > 0)
                     {
+                        log.Write($"Player {turn} used GET OUT OF JAIL card", false);
+
                         players[turn].card--;
                         players[turn].jail = 0;
                         players[turn].state = Player.EState.NORMAL;
@@ -340,6 +359,7 @@ namespace MONOPOLY
 
                 if (players[turn].doub >= 3)
                 {
+                    log.Write($"Player {turn} sent to jail", false);
                     players[turn].position = JAIL_INDEX;
                     players[turn].doub = 0;
                     players[turn].state = Player.EState.JAIL;
@@ -382,6 +402,7 @@ namespace MONOPOLY
 
             if (count >= STALEMATE_TURN)
             {
+                log.Write($"ROUND ENDED IN DRAW AFTER {count} TURNS", true);
                 return EOutcome.DRAW;
             }
 
@@ -728,6 +749,10 @@ namespace MONOPOLY
                 owners[index] = winner;
                 players[winner].items.Add(index);
 
+                tileList.First(t => t.Id == index).Owner = winner;
+                players[winner].tiles.Add(tileList.First(t => t.Id == index));
+                log.Write($"Player {winner} won auction for {tileList.First(t => t.Id == index).Name}", false);
+
                 if (original[index] == -1)
                 {
                     original[index] = winner;
@@ -741,6 +766,10 @@ namespace MONOPOLY
 
                 owners[index] = winner;
                 players[winner].items.Add(index);
+
+                tileList.First(t => t.Id == index).Owner = winner;
+                players[winner].tiles.Add(tileList.First(t => t.Id == index));
+                log.Write($"Player {winner} won auction for {tileList.First(t => t.Id == index).Name}", false);
 
                 if (original[index] == -1)
                 {
@@ -769,7 +798,7 @@ namespace MONOPOLY
                     players[turn].funds += GO_LANDING_BONUS;
                 }
             }
-
+            
             adapter.SetMoney(turn, players[turn].funds);
             adapter.SetPosition(turn, players[turn].position);
 
@@ -779,6 +808,8 @@ namespace MONOPOLY
         public void ActivateTile()
         {
             int index = players[turn].position;
+
+            log.Write($"Player {turn} landed on {tileList.First(t => t.Id == index).Name}", false);
 
             ETile tile = TYPES[index];
 
@@ -811,6 +842,10 @@ namespace MONOPOLY
 
                             players[turn].items.Add(index);
 
+                            tileList.First(t => t.Id == index).Owner = turn;
+                            players[turn].tiles.Add(tileList.First(t => t.Id == index));
+                            log.Write($"Player {turn} purchased {tileList.First(t => t.Id == index).Name}", false);
+
                             adapter.SetOwner(index, owner);
                         }
                         
@@ -823,6 +858,7 @@ namespace MONOPOLY
                 else if (owner == turn)
                 {
                     //do nothing
+                    log.Write($"Player {turn} landed on their own property", false);
                 }
                 else if (!mortgaged[index])
                 {
@@ -857,6 +893,10 @@ namespace MONOPOLY
                             }
 
                             players[turn].items.Add(index);
+                            
+                            tileList.First(t => t.Id == index).Owner = turn;
+                            players[turn].tiles.Add(tileList.First(t => t.Id == index));
+                            log.Write($"Player {turn} purchased {tileList.First(t => t.Id == index).Name}", false);
 
                             adapter.SetOwner(index, turn);
                         }
@@ -917,6 +957,10 @@ namespace MONOPOLY
 
                             players[turn].items.Add(index);
 
+                            tileList.First(t => t.Id == index).Owner = turn;
+                            players[turn].tiles.Add(tileList.First(t => t.Id == index));
+                            log.Write($"Player {turn} purchased {tileList.First(t => t.Id == index).Name}", false);
+
                             adapter.SetOwner(index, turn);
                         }
                             
@@ -944,6 +988,7 @@ namespace MONOPOLY
             }
             else if (tile == ETile.TAX)
             {
+                log.Write($"Player {turn} paid {COSTS[index]} in taxes", false);
                 Payment(turn, COSTS[index]);
             }
             else if (tile == ETile.CHANCE)
@@ -956,6 +1001,7 @@ namespace MONOPOLY
             }
             else if (tile == ETile.JAIL)
             {
+                log.Write($"Player {turn} sent to jail", false);
                 players[turn].position = JAIL_INDEX;
                 players[turn].doub = 0;
                 players[turn].state = Player.EState.JAIL;
@@ -1056,16 +1102,14 @@ namespace MONOPOLY
                     }
                 }
 
-                players[owner].items.Clear();
-
-                //give money to other 
-                players[owner].state = Player.EState.RETIRED;
-                remaining--;
+                RetirePlayer(owner);
             }
         }
 
         public void PaymentToPlayer(int owner, int recipient, int fine)
         {
+            log.Write($"Player {owner} paid {fine} to player {recipient}", false);
+
             players[owner].funds -= fine;
             adapter.SetMoney(owner, players[owner].funds);
 
@@ -1167,11 +1211,7 @@ namespace MONOPOLY
                 players[recipient].funds += housemoney;
                 adapter.SetMoney(recipient, players[recipient].funds);
 
-                players[owner].items.Clear();
-
-                //give money to other 
-                players[owner].state = Player.EState.RETIRED;
-                remaining--;
+                RetirePlayer(owner);
             }
         }
 
@@ -1240,6 +1280,8 @@ namespace MONOPOLY
 
             if (card.card == ECard.ADVANCE)
             {
+                log.Write($"Player {turn} drew CHANCE card - advance", false);
+
                 if (players[turn].position > card.val)
                 {
                     players[turn].funds += GO_BONUS;
@@ -1253,11 +1295,15 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.REWARD)
             {
+                log.Write($"Player {turn} drew CHANCE card - reward", false);
+
                 players[turn].funds += card.val;
                 adapter.SetMoney(turn, players[turn].funds);
             }
             else if (card.card == ECard.FINE)
             {
+                log.Write($"Player {turn} drew CHANCE card - fine", false);
+
                 Payment(turn, card.val);
             }
             else if (card.card == ECard.BACK3)
@@ -1274,6 +1320,7 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.JAIL)
             {
+                log.Write($"Player {turn} sent to jail", false);
                 players[turn].position = JAIL_INDEX;
                 players[turn].doub = 0;
                 players[turn].state = Player.EState.JAIL;
@@ -1283,10 +1330,14 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.RAILROAD2)
             {
+                log.Write($"Player {turn} drew CHANCE card - railroad", false);
+
                 AdvanceToTrain2();
             }
             else if (card.card == ECard.UTILITY10)
             {
+                log.Write($"Player {turn} drew CHANCE card - utility", false);
+
                 AdvanceToUtility10();
             }
             else if (card.card == ECard.CHAIRMAN)
@@ -1307,6 +1358,8 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.REPAIRS)
             {
+                log.Write($"Player {turn} drew CHANCE card - repairs", false);
+
                 int houseCount = 0;
                 int hotelCount = 0;
                 int itemCount = players[turn].items.Count;
@@ -1337,6 +1390,8 @@ namespace MONOPOLY
 
             if (card.card == ECard.ADVANCE)
             {
+                log.Write($"Player {turn} drew CHEST card - advance", false);
+
                 if (players[turn].position > card.val)
                 {
                     players[turn].funds += GO_BONUS;
@@ -1350,11 +1405,15 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.REWARD)
             {
+                log.Write($"Player {turn} drew CHEST card - reward", false);
+
                 players[turn].funds += card.val;
                 adapter.SetMoney(turn, players[turn].funds);
             }
             else if (card.card == ECard.FINE)
             {
+                log.Write($"Player {turn} drew CHEST card - fine", false);
+
                 Payment(turn, card.val);
             }
             else if (card.card == ECard.CARD)
@@ -1364,6 +1423,7 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.JAIL)
             {
+                log.Write($"Player {turn} sent to jail", false);
                 players[turn].position = JAIL_INDEX;
                 players[turn].doub = 0;
                 players[turn].state = Player.EState.JAIL;
@@ -1373,6 +1433,8 @@ namespace MONOPOLY
             }
             else if (card.card == ECard.BIRTHDAY)
             {
+                log.Write($"Player {turn} drew CHEST card - birthday", false);
+
                 for (int i = 0; i < PLAYER_COUNT; i++)
                 {
                     if (i == turn)
@@ -1652,6 +1714,23 @@ namespace MONOPOLY
                 houses[SETS[set, bj]]--;
                 adapter.SetHouse(SETS[set, bj], houses[SETS[set, bj]]);
             }
+        }
+
+        public void RetirePlayer(int playerId)
+        {
+            log.Write($"PLAYER {playerId} RETIRED AFTER {count} ROUNDS", true);
+
+            players[playerId].items.Clear();
+            players[playerId].tiles.Clear();
+
+            foreach (Tile tile in tileList.Where(t => t.Owner == playerId).ToList())
+            {
+                tile.Owner = -1;
+            }
+
+            players[playerId].state = Player.EState.RETIRED;
+            remaining--;
+            STALEMATE_TURN = DRAW_ROUNDS[remaining];
         }
     }
 }
