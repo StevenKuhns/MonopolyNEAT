@@ -388,6 +388,7 @@ namespace MONOPOLY
                 
                 if (remaining <= 1)
                 {
+                    log.Write($"Player {turn} won the game", false);
                     switch (turn)
                     {
                         case 0: return EOutcome.WIN1;
@@ -402,7 +403,7 @@ namespace MONOPOLY
 
             if (count >= STALEMATE_TURN)
             {
-                log.Write($"ROUND ENDED IN DRAW AFTER {count} TURNS", true);
+                log.Write($"Round ended in draw after {count} turns", false);
                 return EOutcome.DRAW;
             }
 
@@ -497,6 +498,7 @@ namespace MONOPOLY
 
                 if (decision > 0)
                 {
+                    log.Write($"Player {turn} sold house - {log.fileName}", false);
                     SellHouses(sets[j], decision);
                     players[turn].funds += (int)(decision * BUILD[property[SETS[sets[j], 0]]] * 0.5f);
                 }
@@ -538,6 +540,7 @@ namespace MONOPOLY
 
                 if (decision > 0)
                 {
+                    log.Write($"Player {turn} bought house - {log.fileName}", false);
                     BuildHouses(sets[j], decision);
                     Payment(turn, decision * BUILD[property[SETS[sets[j], 0]]]);
                 }
@@ -1046,8 +1049,8 @@ namespace MONOPOLY
 
                     if (decision > 0)
                     {
+                        log.Write($"Player {owner} sold house - {log.fileName}", false);
                         SellHouses(sets[j], decision);
-
                         players[owner].funds += (int)(decision * BUILD[property[SETS[sets[j], 0]]] * 0.5f);
                         adapter.SetMoney(owner, players[owner].funds);
                     }
@@ -1147,9 +1150,9 @@ namespace MONOPOLY
 
                     if (decision > 0)
                     {
+                        log.Write($"Player {owner} sold house - {log.fileName}", false);
                         SellHouses(sets[j], decision);
                         players[owner].funds += (int)(decision * BUILD[property[SETS[sets[j], 0]]] * 0.5f);
-
                         adapter.SetMoney(owner, players[owner].funds);
                     }
                 }
@@ -1718,7 +1721,7 @@ namespace MONOPOLY
 
         public void RetirePlayer(int playerId)
         {
-            log.Write($"PLAYER {playerId} RETIRED AFTER {count} ROUNDS", true);
+            log.Write($"Player {playerId} retired after {count} rounds", false);
 
             players[playerId].items.Clear();
             players[playerId].tiles.Clear();
@@ -1730,7 +1733,9 @@ namespace MONOPOLY
 
             players[playerId].state = Player.EState.RETIRED;
             remaining--;
-            STALEMATE_TURN = DRAW_ROUNDS[remaining];
+
+            if (remaining >= 0)
+                STALEMATE_TURN = DRAW_ROUNDS[remaining];
         }
     }
 }

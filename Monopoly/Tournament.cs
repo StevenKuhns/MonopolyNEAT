@@ -11,18 +11,24 @@ namespace Monopoly
     public class Tournament
     {
         Logger log;
+        static bool debugMasterLog = false;
+        static bool debugThreadLog = false;
+        static bool skipThreadLog = true;
 
         public static int TOURNAMENT_SIZE = 256; // Number of players per tournament: default - 256
         public static int ROUND_SIZE = 2000; // Total number of rounds played (WORKERS * BATCH_SIZE): default - 2000
         
-        public static int WORKERS = 2; // Number of threads generated to play games: default - 20
-        public static int BATCH_SIZE = 2; // Number of games played per group of players: default -20
+        public static int WORKERS = 20; // Number of threads generated to play games: default - 20
+        public static int BATCH_SIZE = 20; // Number of games played per group of players: default -20
 
         public NEAT.Genotype champion = null;
         public float championScore = 0.0f;
 
         public List<NEAT.Phenotype> contestants;
         public List<NEAT.Genotype> contestants_g;
+
+        static MONOPOLY.Tiles tiles;
+        static List<MONOPOLY.Tile> tileList;
 
         public Tournament()
         {
@@ -33,17 +39,20 @@ namespace Monopoly
         public void Initialise()
         {
             log = new Logger();
-            log.debug = false;
+            log.debug = debugMasterLog;
 
             int INPUTS = 126;
             int OUTPUTS = 9;
+
+            tiles = new MONOPOLY.Tiles();
+            tileList = tiles.GetTiles();
 
             NEAT.Population.instance.GenerateBasePopulation(TOURNAMENT_SIZE, INPUTS, OUTPUTS);
         }
 
         public void ExecuteTournament(int t)
         {
-            log.Write($"TOURNAMENT # {NEAT.Population.instance.GENERATION}", true);
+            log.Write($"TOURNAMENT # {NEAT.Population.instance.GENERATION} - {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss")}", true);
 
             int tournamentId = t;
             int generationId = NEAT.Population.instance.GENERATION;
@@ -84,7 +93,7 @@ namespace Monopoly
 
         public void ExecuteTournamentRound(int tournament, int generation)
         {
-            log.Write($"ROUND SIZE {contestants.Count}", true);
+            log.Write($"ROUND SIZE {contestants.Count} - {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss")}", true);
 
             List<NEAT.Phenotype> cs = new List<NEAT.Phenotype>();
             List<NEAT.Genotype> cs_g = new List<NEAT.Genotype>();
@@ -103,7 +112,7 @@ namespace Monopoly
             {
                 int played = 0;
 
-                log.Write($"BRACKET ({( i / 4 )})", true);
+                log.Write($"BRACKET ({( i / 4 )}) - {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss")}", true);
 
                 while (played < ROUND_SIZE)
                 {
@@ -135,7 +144,7 @@ namespace Monopoly
 
                     for (int c = 0; c < 40; c++)
                     {
-                        log.Write($"index: {c}, {Monopoly.Analytics.instance.ratio[c]}", true);
+                        log.Write($"index: {c}, {Monopoly.Analytics.instance.ratio[c]} - {tileList.First(t => t.Id == c).Name}", true);
                     }
                 }
 
@@ -179,7 +188,8 @@ namespace Monopoly
         public static void PlayGameThread(Tournament instance, int i, ThreadLogger tl)
         {
             Logger threadLog = new Logger(tl);
-            threadLog.debug = true;
+            threadLog.debug = debugThreadLog;
+            threadLog.skipLogging = skipThreadLog;
 
             for (int game = 0; game < BATCH_SIZE; game++)
             {

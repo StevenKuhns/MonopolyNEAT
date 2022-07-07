@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using Logging;
 
 namespace Monopoly
@@ -8,22 +10,23 @@ namespace Monopoly
     class Program
     {
         static Logger log;
+        static DirectoryInfo di;
 
         static void Main()
         {
             log = new Logger();
+            log.debug = false;
+
             Analytics a = new Analytics();
             Analytics.instance = a;
 
-            DirectoryInfo di = new DirectoryInfo(Directory.GetCurrentDirectory());
+            di = new DirectoryInfo(Directory.GetCurrentDirectory());
+            string path = $"{di.FullName}\\monopoly_population.txt";
 
-            string path = $"{di.Parent.FullName}\\monopoly_population.txt";
+            if (Directory.Exists($"{di.FullName}\\PopStates") == false)
+                Directory.CreateDirectory($"{di.FullName}\\PopStates");
 
-            string[] logFiles = Directory.GetFiles(di.Parent.FullName, "*.log");
-            for (int l = 0; l < logFiles.Length; l++)
-            {
-                File.Delete(logFiles[l]);
-            }
+            log.Write($"STARTING PROGRAM - {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss")}", true);
 
             RNG.Initialise();
 
@@ -39,7 +42,7 @@ namespace Monopoly
 
             if (File.Exists(path))
             {
-                //tournament.Initialise();
+                tournament.Initialise();
                 LoadState(path, ref tournament);
             }
             else
@@ -47,9 +50,8 @@ namespace Monopoly
                 tournament.Initialise();
             }
 
-            for (int i = 0; i < 1000; i++)
+            for (int i = 0; i < 1000; i++) // default - 1000
             {
-                log.Write($"STARTING TOURNAMENT {i}", true);
                 tournament.ExecuteTournament(i);
                 NEAT.Population.instance.NewGeneration();
                 SaveState(path, tournament);
@@ -62,7 +64,11 @@ namespace Monopoly
 
         public static void SaveState(string target, Tournament tournament)
         {
-            log.Write($"SAVING POPULATION", true);
+            log.Write($"SAVING POPULATION - {DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss")}", true);
+            PopulationState popState = new PopulationState();
+
+            MONOPOLY.Tiles tiles = new MONOPOLY.Tiles();
+            List<MONOPOLY.Tile> tileList = tiles.GetTiles();
 
             string build = "";
             string build2 = "";
@@ -71,6 +77,9 @@ namespace Monopoly
             build += DELIM_MAIN;
             build += tournament.championScore.ToString();
             build += DELIM_MAIN;
+
+            popState.Generation = NEAT.Population.instance.GENERATION;
+            popState.ChampionScore = (int)tournament.championScore;
 
             int markings = 0;
 
@@ -91,6 +100,12 @@ namespace Monopoly
                 }
 
                 markings++;
+
+                popState.Markings.Add(new Marking {
+                    Order = NEAT.Mutation.instance.historical[i].order,
+                    Source = NEAT.Mutation.instance.historical[i].source,
+                    Destination = NEAT.Mutation.instance.historical[i].destination
+                });
             }
 
             List<string> net_build = new List<string>();
@@ -102,6 +117,9 @@ namespace Monopoly
             //save neworks, species by species
             for (int i = 0; i < NEAT.Population.instance.species.Count; i++)
             {
+                Network network = new Network();
+                network.Members = new List<Member>();
+
                 net_build.Add("");
                 net_count++;
 
@@ -113,13 +131,18 @@ namespace Monopoly
 
                 int members = NEAT.Population.instance.species[i].members.Count;
 
+                network.TopFitness = (int)NEAT.Population.instance.species[i].topFitness;
+                network.Staleness = NEAT.Population.instance.species[i].staleness;
+
                 for (int j = 0; j < members; j++)
                 {
+                    Member member = new Member();
+                    member.Vertices = new List<Vertice>();
+                    member.Edges = new List<Edge>();
+
                     net_build.Add("");
                     net_count++;
                     gene_count++;
-
-                    log.Write($"{gene_count}/{NEAT.Population.instance.genetics.Count}", true);
 
                     NEAT.Genotype genes = NEAT.Population.instance.species[i].members[j];
 
@@ -131,6 +154,12 @@ namespace Monopoly
                         net_build[net_count] += DELIM_COMMA;
                         net_build[net_count] += genes.vertices[k].type.ToString();
                         net_build[net_count] += DELIM_COMMA;
+
+                        member.Vertices.Add(new Vertice
+                        {
+                            Index = genes.vertices[k].index,
+                            Type = genes.vertices[k].type.ToString()
+                        });
                     }
 
                     net_build[net_count] += '#';
@@ -149,18 +178,41 @@ namespace Monopoly
                         net_build[net_count] += DELIM_COMMA;
                         net_build[net_count] += genes.edges[k].innovation.ToString();
                         net_build[net_count] += DELIM_COMMA;
+
+                        member.Edges.Add(new Edge
+                        {
+                            Source = genes.edges[k].source,
+                            Destination = genes.edges[k].destination,
+                            Weight = genes.edges[k].weight,
+                            Enabled = genes.edges[k].enabled,
+                            Innovation = genes.edges[k].innovation
+                        });
                     }
 
                     if (j != members - 1)
                     {
                         net_build[net_count] += "n";
                     }
+
+                    network.Members.Add(member);
                 }
 
                 if (i != NEAT.Population.instance.species.Count - 1)
                 {
                     net_build[net_count] += "&";
-                }          
+                }
+
+                popState.Networks.Add(network);
+
+                for (int c = 0; c < 40; c++)
+                {
+                    popState.Analytics.Add(new Analytic
+                        {
+                            Ratio = Monopoly.Analytics.instance.ratio[c],
+                            Name = tileList.First(t => t.Id == c).Name
+                        }
+                    );
+                }
             }
 
             build2 += DELIM_MAIN;
@@ -178,6 +230,14 @@ namespace Monopoly
             }
 
             log.Write($"{markings} MARKINGS", true);
+
+            string jsonObject = JsonSerializer.Serialize<PopulationState>(popState);
+            string fileName = $"{di.FullName}\\PopStates\\PopulationState-{popState.Generation}.json";
+
+            using (StreamWriter sw = new StreamWriter(fileName))
+            {
+                sw.Write(jsonObject);
+            }
         }
 
         public static void LoadState(string location, ref Tournament tournament)
